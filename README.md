@@ -29,44 +29,73 @@ The challenge is to create an interactive image captioning tool that uses a pret
 ### PROGRAM:
 
 ```py
-# Install necessary libraries (if not already installed)
-!pip install gradio transformers torch
-```
-```py
-import gradio as gr
-from transformers import BlipProcessor, BlipForConditionalGeneration
-import torch
+import os
+import io
+import IPython.display
 from PIL import Image
+import base64 
+from dotenv import load_dotenv, find_dotenv
+_ = load_dotenv(find_dotenv())  # read local .env file
 
-# Step 1: Load the BLIP model and processor
-processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+hf_api_key = os.environ['HF_API_KEY']
 
-# Step 2: Define a function to generate captions for uploaded images
-def generate_caption(image):
-    # Preprocess the image and feed it into the model
-    inputs = processor(images=image, return_tensors="pt")
-    out = model.generate(**inputs)
-    
-    # Decode the generated caption
-    caption = processor.decode(out[0], skip_special_tokens=True)
-    return caption
+# Helper functions
+import requests, json
 
-# Step 3: Create a Gradio interface
-iface = gr.Interface(
-    fn=generate_caption, 
-    inputs=gr.Image(type="pil"), 
-    outputs=gr.Textbox(), 
-    live=True,
-    title="BLIP Image Captioning",
-    description="Upload an image and get a generated caption."
-)
+# Image-to-text endpoint
+def get_completion(inputs, parameters=None, ENDPOINT_URL=os.environ['HF_API_ITT_BASE']):
+    headers = {
+        "Authorization": f"Bearer {hf_api_key}",
+        "Content-Type": "application/json"
+    }
+    data = { "inputs": inputs }
+    if parameters is not None:
+        data.update({"parameters": parameters})
+    response = requests.request("POST",
+                                ENDPOINT_URL,
+                                headers=headers,
+                                data=json.dumps(data))
+    return json.loads(response.content.decode("utf-8"))
 
-# Step 4: Launch the Gradio interface
-iface.launch()
+# TESTING WITH A DIRECT IMAGE URL
+image_url = "https://free-images.com/or/5549/wesley_sneijder_vs_lionel.jpg"
+display(IPython.display.Image(url=image_url))
+get_completion(image_url)
+
+# Gradio Integration
+import gradio as gr 
+
+def image_to_base64_str(pil_image):
+    byte_arr = io.BytesIO()
+    pil_image.save(byte_arr, format='PNG')
+    byte_arr = byte_arr.getvalue()
+    return str(base64.b64encode(byte_arr).decode('utf-8'))
+
+def captioner(image):
+    base64_image = image_to_base64_str(image)
+    result = get_completion(base64_image)
+    return result[0]['generated_text']
+
+gr.close_all()
+demo = gr.Interface(fn=captioner,
+                    inputs=[gr.Image(label="Upload image", type="pil")],
+                    outputs=[gr.Textbox(label="Caption")],
+                    title="Image Captioning with BLIP",
+                    description="Caption any image using the BLIP model",
+                    allow_flagging="never",
+                    examples=["christmas_dog.jpeg", "bird_flight.jpeg", "cow.jpeg"])
+
+demo.launch(share=True, server_port=int(os.environ['PORT1']))
+
+gr.close_all()
+
 ```
 ### OUTPUT:
-![image](https://github.com/user-attachments/assets/754925d4-6459-4fd3-90c4-7bf7717005e0)
+### 1.) Output
+![Output Experiment 6(2) Gen AI](https://github.com/user-attachments/assets/c370aa4c-07c6-40c4-8bf1-a5d66af18736)
+
+### 2.) Output
+![Output Experiment 6 Gen AI](https://github.com/user-attachments/assets/14f4285f-a27e-417a-a0c0-02b6648cfa85)
 
 ### RESULT:
 Thus, The application allows users to upload an image through the Gradio interface, where it is processed by the BLIP model to generate a caption. Once the image is processed, the BLIP model produces a concise and relevant description of the image, which is displayed back to the user. For instance, if the uploaded image depicts a dog running in a park, the model may generate a caption such as "A dog running on grass." The system successfully demonstrates the integration of the BLIP image captioning model with Gradio, providing an intuitive and responsive user interface for real-time caption generation. The prototype works effectively for a variety of images, offering accurate and contextually appropriate captions. This application could be expanded further to handle more complex use cases, such as captioning images from specific domains like medical, fashion, or sports.
